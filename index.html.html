@@ -1,0 +1,1344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lost Revenue Intelligence Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #111318;
+    --surface2: #181b22;
+    --border: #1f2330;
+    --accent: #ff4d6d;
+    --accent2: #ff8800;
+    --accent3: #00d4aa;
+    --accent4: #7b61ff;
+    --text: #e8eaf0;
+    --muted: #6b7280;
+    --warning: #fbbf24;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrapper { position: relative; z-index: 1; }
+
+  /* HEADER */
+  header {
+    padding: 28px 40px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(to right, #0a0c10, #0f1118);
+  }
+
+  .header-left { display: flex; align-items: center; gap: 16px; }
+
+  .logo-mark {
+    width: 42px; height: 42px;
+    background: var(--accent);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    display: flex; align-items: center; justify-content: center;
+    animation: pulse-logo 3s ease-in-out infinite;
+  }
+
+  @keyframes pulse-logo {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.95); }
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    color: var(--text);
+  }
+
+  header h1 span { color: var(--accent); }
+
+  .header-meta {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+    text-align: right;
+  }
+
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(255,77,109,0.12);
+    border: 1px solid rgba(255,77,109,0.3);
+    color: var(--accent);
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: blink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.2; } }
+
+  /* FILTER BAR */
+  .filter-bar {
+    padding: 16px 40px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .filter-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-right: 4px;
+  }
+
+  .filter-btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .filter-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+
+  /* MAIN GRID */
+  .main { padding: 32px 40px; }
+
+  /* KPI ROW */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--kpi-color, var(--accent));
+  }
+
+  .kpi-card:hover { border-color: var(--kpi-color, var(--accent)); }
+
+  .kpi-icon {
+    font-size: 18px;
+    margin-bottom: 8px;
+    opacity: 0.7;
+  }
+
+  .kpi-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+  }
+
+  .kpi-value {
+    font-family: 'Syne', sans-serif;
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text);
+    letter-spacing: -1px;
+  }
+
+  .kpi-sub {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .kpi-sub.up { color: var(--accent); }
+  .kpi-sub.good { color: var(--accent3); }
+
+  /* CHART GRID */
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .charts-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+  }
+
+  .chart-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  .chart-subtitle {
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  .chart-tag {
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: rgba(255,77,109,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(255,77,109,0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  canvas { max-width: 100%; }
+
+  /* TABLE */
+  .table-section { margin-bottom: 20px; }
+
+  .table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .table-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .search-box {
+    padding: 7px 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    width: 220px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box:focus { border-color: var(--accent); }
+  .search-box::placeholder { color: var(--muted); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 400;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid rgba(31,35,48,0.5);
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover { background: var(--surface2); }
+
+  td {
+    padding: 12px 14px;
+    color: var(--text);
+    vertical-align: top;
+  }
+
+  td.store { color: var(--accent2); font-size: 11px; }
+  td.revenue { color: var(--accent); font-weight: 500; text-align: right; }
+  td.products { color: var(--muted); font-size: 11px; max-width: 320px; }
+
+  .store-pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+  }
+
+  /* HEATMAP */
+  .heatmap-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-top: 12px;
+  }
+
+  .hm-cell {
+    aspect-ratio: 1;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    transition: transform 0.15s;
+    position: relative;
+  }
+
+  .hm-cell:hover {
+    transform: scale(1.1);
+    z-index: 2;
+  }
+
+  .hm-label {
+    font-size: 9px;
+    color: var(--muted);
+    text-align: center;
+    padding: 2px 0;
+  }
+
+  /* PRODUCT BARS */
+  .product-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+  }
+
+  .product-name {
+    width: 180px;
+    flex-shrink: 0;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 10px;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 6px;
+    background: var(--surface2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(to right, var(--accent4), var(--accent));
+    transition: width 1s ease;
+  }
+
+  .bar-val {
+    width: 60px;
+    text-align: right;
+    color: var(--text);
+    font-size: 10px;
+  }
+
+  /* STORE PERF */
+  .store-row {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+
+  .store-rank {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--surface2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  .store-name-col { flex: 1; }
+  .store-name-text { font-size: 12px; color: var(--text); }
+  .store-incidents { font-size: 10px; color: var(--muted); }
+  .store-amount { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700; color: var(--accent); text-align: right; }
+
+  /* ALERT STRIP */
+  .alert-strip {
+    background: rgba(255,136,0,0.07);
+    border: 1px solid rgba(255,136,0,0.2);
+    border-radius: 6px;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+    font-size: 12px;
+    color: var(--accent2);
+  }
+
+  /* FOOTER */
+  footer {
+    padding: 16px 40px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* PAGINATION */
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+    justify-content: flex-end;
+  }
+
+  .page-btn {
+    padding: 5px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .page-btn:hover, .page-btn.active { border-color: var(--accent); color: var(--accent); }
+
+  /* TOOLTIP */
+  .tooltip-container { position: relative; display: inline-block; }
+  .tooltip-container:hover .tooltip { display: block; }
+  .tooltip {
+    display: none;
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    color: var(--text);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* RESPONSIVE */
+  @media (max-width: 1200px) {
+    .kpi-row { grid-template-columns: repeat(3, 1fr); }
+    .charts-grid { grid-template-columns: 1fr; }
+    .charts-grid-2 { grid-template-columns: 1fr 1fr; }
+  }
+
+  @media (max-width: 768px) {
+    header { flex-direction: column; gap: 12px; padding: 20px; }
+    .main { padding: 20px; }
+    .filter-bar { padding: 12px 20px; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .charts-grid-2 { grid-template-columns: 1fr; }
+  }
+
+  /* Animate in */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .kpi-card, .chart-card { animation: fadeUp 0.5s ease both; }
+  .kpi-card:nth-child(1) { animation-delay: 0.05s; }
+  .kpi-card:nth-child(2) { animation-delay: 0.1s; }
+  .kpi-card:nth-child(3) { animation-delay: 0.15s; }
+  .kpi-card:nth-child(4) { animation-delay: 0.2s; }
+  .kpi-card:nth-child(5) { animation-delay: 0.25s; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+<!-- HEADER -->
+<header>
+  <div class="header-left">
+    <div class="logo-mark"></div>
+    <div>
+      <h1>Lost Revenue <span>Intelligence</span></h1>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">Stock Unavailability · Sales Loss Tracker</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <div class="header-meta">
+      <div>Jan 16, 2026 — Apr 7, 2026</div>
+      <div id="last-updated">Last updated: just now</div>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  </div>
+</header>
+
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <span class="filter-label">Store</span>
+  <button class="filter-btn active" onclick="filterStore('all',this)">All Stores</button>
+  <button class="filter-btn" onclick="filterStore('PMC, Vimannagar',this)">PMC Vimannagar</button>
+  <button class="filter-btn" onclick="filterStore('Nexus Westend, Aundh',this)">Nexus Westend</button>
+  <button class="filter-btn" onclick="filterStore('Amanora, Magarpatta',this)">Amanora</button>
+  <button class="filter-btn" onclick="filterStore('Elpro, PCMC',this)">Elpro PCMC</button>
+  <button class="filter-btn" onclick="filterStore('ATP, Balewadi',this)">ATP Balewadi</button>
+  <button class="filter-btn" onclick="filterStore('Kopa Mall',this)">Kopa Mall</button>
+  <div class="filter-sep"></div>
+  <span class="filter-label">Period</span>
+  <button class="filter-btn active" id="pAll" onclick="filterMonth('all',this)">All</button>
+  <button class="filter-btn" id="pJan" onclick="filterMonth('jan',this)">Jan</button>
+  <button class="filter-btn" id="pFeb" onclick="filterMonth('feb',this)">Feb</button>
+  <button class="filter-btn" id="pMar" onclick="filterMonth('mar',this)">Mar</button>
+  <button class="filter-btn" id="pApr" onclick="filterMonth('apr',this)">Apr</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- ALERT -->
+  <div class="alert-strip" id="alertStrip">
+    <span style="font-size:18px;">⚠️</span>
+    <span id="alertText">Loading insights...</span>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kpi-row">
+    <div class="kpi-card" style="--kpi-color:var(--accent);">
+      <div class="kpi-icon">₹</div>
+      <div class="kpi-label">Total Lost Revenue</div>
+      <div class="kpi-value" id="kpiTotal">—</div>
+      <div class="kpi-sub up" id="kpiTotalSub">Across all stores</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--accent2);">
+      <div class="kpi-icon">📦</div>
+      <div class="kpi-label">Loss Incidents</div>
+      <div class="kpi-value" id="kpiIncidents">—</div>
+      <div class="kpi-sub" id="kpiIncidentsSub">Total stockout events</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--accent3);">
+      <div class="kpi-icon">📊</div>
+      <div class="kpi-label">Avg Loss / Incident</div>
+      <div class="kpi-value" id="kpiAvg">—</div>
+      <div class="kpi-sub" id="kpiAvgSub">Per stockout event</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--accent4);">
+      <div class="kpi-icon">🏪</div>
+      <div class="kpi-label">Worst Store</div>
+      <div class="kpi-value" id="kpiWorst" style="font-size:14px;">—</div>
+      <div class="kpi-sub up" id="kpiWorstSub">Highest loss</div>
+    </div>
+    <div class="kpi-card" style="--kpi-color:var(--warning);">
+      <div class="kpi-icon">📅</div>
+      <div class="kpi-label">Peak Loss Day</div>
+      <div class="kpi-value" id="kpiPeak" style="font-size:16px;">—</div>
+      <div class="kpi-sub up" id="kpiPeakSub">Single day max</div>
+    </div>
+  </div>
+
+  <!-- MAIN CHARTS ROW -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <div class="chart-title">
+        Daily Lost Revenue Trend
+        <span class="chart-tag">Time Series</span>
+      </div>
+      <div class="chart-subtitle">Revenue lost per day due to stockouts — rolling view</div>
+      <canvas id="trendChart" height="100"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">
+        Store Loss Distribution
+        <span class="chart-tag">Share</span>
+      </div>
+      <div class="chart-subtitle">% of total lost revenue by store</div>
+      <canvas id="donutChart" height="180"></canvas>
+    </div>
+  </div>
+
+  <!-- SECOND ROW -->
+  <div class="charts-grid-2">
+    <div class="chart-card">
+      <div class="chart-title">
+        Monthly Comparison
+        <span class="chart-tag">Bar</span>
+      </div>
+      <div class="chart-subtitle">Total lost revenue per month by store</div>
+      <canvas id="barChart" height="140"></canvas>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">
+        Top Lost Products
+        <span class="chart-tag">Frequency</span>
+      </div>
+      <div class="chart-subtitle">Most frequently out-of-stock items</div>
+      <div id="productBars" style="margin-top:12px;"></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">
+        Store Performance Rank
+        <span class="chart-tag">Ranking</span>
+      </div>
+      <div class="chart-subtitle">Sorted by total revenue lost</div>
+      <div id="storeRanks"></div>
+    </div>
+  </div>
+
+  <!-- DETAIL TABLE -->
+  <div class="chart-card table-section">
+    <div class="table-header">
+      <div class="table-title" style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;">
+        Incident Log
+        <span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;margin-left:8px;" id="rowCount"></span>
+      </div>
+      <input class="search-box" type="text" id="tableSearch" placeholder="Search products, stores..." oninput="renderTable()">
+    </div>
+    <table id="incidentTable">
+      <thead>
+        <tr>
+          <th onclick="sortTable('date')" style="cursor:pointer;"># Date ↕</th>
+          <th onclick="sortTable('store')" style="cursor:pointer;">Store ↕</th>
+          <th>Products Unavailable</th>
+          <th onclick="sortTable('revenue')" style="cursor:pointer;text-align:right;">Est. Loss ↕</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+    <div class="pagination" id="pagination"></div>
+  </div>
+
+</div><!-- end main -->
+
+<footer>
+  <div>Lost Revenue Intelligence Dashboard · Frido Retail Analytics</div>
+  <div id="footerStats">Loading...</div>
+</footer>
+
+</div><!-- end wrapper -->
+
+<script>
+// ========================= RAW DATA =========================
+const RAW = [
+  {date:"2026-01-16",store:"PMC, Vimannagar",products:"Deep sleep pillow, Insole arch support sports",revenue:3999},
+  {date:"2026-01-16",store:"Amanora, Magarpatta",products:"5inch deep sleep pillow - 4 pcs",revenue:6000},
+  {date:"2026-01-16",store:"ATP, Balewadi",products:"Rigid, Semi-rigid insole, Nasal Strips, Dual gel pro insole",revenue:2800},
+  {date:"2026-01-17",store:"ATP, Balewadi",products:"Rigid, Semi-Rigid insoles, Nasal Strips",revenue:1800},
+  {date:"2026-01-18",store:"Amanora, Magarpatta",products:"Posture corrector L/M, Deep sleep pillow 4&5, Slip on shoes 8uk",revenue:9794},
+  {date:"2026-01-18",store:"PMC, Vimannagar",products:"Travel neck pillow, Maternity pillow",revenue:3098},
+  {date:"2026-01-19",store:"Amanora, Magarpatta",products:"Deep sleep pillow, Cuddle pillow yellow",revenue:4498},
+  {date:"2026-01-19",store:"Nexus Westend, Aundh",products:"Women cloud sandal, 5 inch deep sleep pillow",revenue:3398},
+  {date:"2026-01-19",store:"PMC, Vimannagar",products:"Knee cap, Travel neck pillow",revenue:2098},
+  {date:"2026-01-19",store:"ATP, Balewadi",products:"Rigid and semi-rigid insole",revenue:2198},
+  {date:"2026-01-20",store:"Nexus Westend, Aundh",products:"Men's puneri size 12, Gel max insoles",revenue:4097},
+  {date:"2026-01-20",store:"Elpro, PCMC",products:"Maternity bundle",revenue:2499},
+  {date:"2026-01-20",store:"Amanora, Magarpatta",products:"Travel neck pillow",revenue:1199},
+  {date:"2026-01-21",store:"Amanora, Magarpatta",products:"Cloud comfort mens sandal",revenue:1899},
+  {date:"2026-01-21",store:"Elpro, PCMC",products:"Arch support insoles",revenue:1199},
+  {date:"2026-01-22",store:"Amanora, Magarpatta",products:"Barefoot Shock shoe L, Slip on shoes size uk 8 Black",revenue:4300},
+  {date:"2026-01-22",store:"Nexus Westend, Aundh",products:"Arch Support slipper size not available",revenue:999},
+  {date:"2026-01-22",store:"PMC, Vimannagar",products:"Gel max insoles, Car combo, 3D posture plus chair",revenue:19897},
+  {date:"2026-01-23",store:"PMC, Vimannagar",products:"Arch support insoles, Travel neck pillow, Deep sleep pillow",revenue:3997},
+  {date:"2026-01-23",store:"Nexus Westend, Aundh",products:"Bare foot sock, Cloud comfort shoes size not available",revenue:4278},
+  {date:"2026-01-23",store:"Elpro, PCMC",products:"Car neck rest pillow Black",revenue:999},
+  {date:"2026-01-23",store:"Amanora, Magarpatta",products:"Arch support Insoles",revenue:699},
+  {date:"2026-01-24",store:"Amanora, Magarpatta",products:"Slippers options, Knee cap sport Black m",revenue:1500},
+  {date:"2026-01-24",store:"Elpro, PCMC",products:"Cloud comfort slip on UK 6",revenue:2499},
+  {date:"2026-01-24",store:"PMC, Vimannagar",products:"Dual car combo",revenue:2199},
+  {date:"2026-01-25",store:"Nexus Westend, Aundh",products:"Car Comfort Bundle",revenue:2999},
+  {date:"2026-01-25",store:"PMC, Vimannagar",products:"Arch sports insole, Travel neck pillow",revenue:2398},
+  {date:"2026-01-25",store:"Elpro, PCMC",products:"Cloud comfort men 10 number",revenue:2499},
+  {date:"2026-01-25",store:"Amanora, Magarpatta",products:"Arch slippers UK 08, Mens cloud sandal, Puneri UK 08, deep sleep pillow, arch sport insole, Wedge plus CB",revenue:9444},
+  {date:"2026-01-26",store:"Amanora, Magarpatta",products:"Punneri chappal tan colour 10 UK",revenue:2499},
+  {date:"2026-01-26",store:"Elpro, PCMC",products:"Knee support wrap",revenue:899},
+  {date:"2026-01-26",store:"PMC, Vimannagar",products:"Deep sleep pillow, Knee cap, Car neck pillow",revenue:3397},
+  {date:"2026-01-27",store:"Elpro, PCMC",products:"Maternity combo, Arch Slipper UK5",revenue:2848},
+  {date:"2026-01-27",store:"PMC, Vimannagar",products:"Cloud comfort slippers, Cloud comfort sandal, Insole arch sport",revenue:3447},
+  {date:"2026-01-27",store:"Amanora, Magarpatta",products:"Arch slipper",revenue:949},
+  {date:"2026-01-28",store:"PMC, Vimannagar",products:"Cuddle pillow",revenue:2999},
+  {date:"2026-01-28",store:"Nexus Westend, Aundh",products:"Car neck rest pillow, Next day delivery shoes unavailable",revenue:999},
+  {date:"2026-01-28",store:"Amanora, Magarpatta",products:"Travel neck pillow, Puneri UK10, Cervical neck pillow",revenue:5279},
+  {date:"2026-01-29",store:"Nexus Westend, Aundh",products:"Car combo not available for cash and carry",revenue:2199},
+  {date:"2026-01-29",store:"Amanora, Magarpatta",products:"Wedge max cushion, Arch sport insole",revenue:3698},
+  {date:"2026-01-29",store:"Elpro, PCMC",products:"Womens arch sandal rose 40",revenue:1999},
+  {date:"2026-01-29",store:"PMC, Vimannagar",products:"Cloud comfort sandal, Car combo, Travel neck pillow",revenue:5397},
+  {date:"2026-01-30",store:"ATP, Balewadi",products:"Cloud sandal UK 3 size",revenue:1999},
+  {date:"2026-01-30",store:"Nexus Westend, Aundh",products:"Stock not available",revenue:0},
+  {date:"2026-01-30",store:"PMC, Vimannagar",products:"Puneri chappal, Barefoot max insoles",revenue:3148},
+  {date:"2026-01-31",store:"Amanora, Magarpatta",products:"Maternity bundle, Slipper",revenue:4498},
+  {date:"2026-01-31",store:"PMC, Vimannagar",products:"Puneri chappal, Cloud comfort shoes, Backrest cushion",revenue:6297},
+  {date:"2026-01-31",store:"Nexus Westend, Aundh",products:"Car Comfort Bundle 1pc, Puneri Chappal 2pc, Cloud Comfort Shoes 2pc",revenue:12995},
+  {date:"2026-01-31",store:"Elpro, PCMC",products:"Travel neck (SB), Maternity bundle",revenue:4700},
+  {date:"2026-02-01",store:"Elpro, PCMC",products:"Mens cloud comfort sandal",revenue:1999},
+  {date:"2026-02-01",store:"PMC, Vimannagar",products:"Men's puneri chappal",revenue:2499},
+  {date:"2026-02-01",store:"Nexus Westend, Aundh",products:"Men's cloud comfort, Puneri Chappal, Ultimate Back Lumbar Cushion, Knee Cap Support",revenue:14693},
+  {date:"2026-02-01",store:"Amanora, Magarpatta",products:"Lumbo sacral belt XL, Arch support slipper, Men's cloud comfort sandal",revenue:4347},
+  {date:"2026-02-02",store:"Nexus Westend, Aundh",products:"Insole not available in Store",revenue:0},
+  {date:"2026-02-02",store:"Elpro, PCMC",products:"Men cloud comfort thog, Posture corrector, Puneri men burgundy",revenue:5397},
+  {date:"2026-02-02",store:"PMC, Vimannagar",products:"Puneri chappal, Cloud comfort sandal",revenue:4498},
+  {date:"2026-02-03",store:"Elpro, PCMC",products:"Posture corrector L M S, Puneri burgundy 9 size, Car neck pillow black",revenue:9192},
+  {date:"2026-02-03",store:"Amanora, Magarpatta",products:"Travel neck pillow",revenue:1199},
+  {date:"2026-02-03",store:"Nexus Westend, Aundh",products:"Footwear size not available, Plantar fasciitis insole, Tail bone cushion",revenue:0},
+  {date:"2026-02-03",store:"PMC, Vimannagar",products:"Arch slippers, Cloud comfort sandal",revenue:2948},
+  {date:"2026-02-04",store:"Elpro, PCMC",products:"Puneri chappal Tan",revenue:2499},
+  {date:"2026-02-04",store:"Amanora, Magarpatta",products:"Cloud comfort Sandal uk 5/6, Puneri chappal uk 9",revenue:6497},
+  {date:"2026-02-04",store:"PMC, Vimannagar",products:"Arch support insoles, Lumbar sacral belt, Men's cloud comfort, Car backrest, Posture corrector, Butterfly pillow, Travel neck pillow",revenue:11392},
+  {date:"2026-02-05",store:"PMC, Vimannagar",products:"Cloud comfort sandal, Posture corrector, Punneri chappal",revenue:5397},
+  {date:"2026-02-05",store:"Nexus Westend, Aundh",products:"Car Comfort Bundle Black, Men's Puneri Tan/9",revenue:5498},
+  {date:"2026-02-05",store:"Amanora, Magarpatta",products:"Knee support wrap, Arch slippers uk 6 women",revenue:2698},
+  {date:"2026-02-05",store:"Elpro, PCMC",products:"Mens dual strap sandal, Puneri chappal burgundy 8",revenue:4698},
+  {date:"2026-02-06",store:"Elpro, PCMC",products:"Maternity bundle, Wedge plus brown, Women's Puneri UK 4 Tan",revenue:6997},
+  {date:"2026-02-06",store:"Nexus Westend, Aundh",products:"Women cloud shoes size/colour unavailable, Car comfort bundle, Plantar fasciitis insole",revenue:0},
+  {date:"2026-02-06",store:"PMC, Vimannagar",products:"Gel max insoles, Car neck pillow, Deep sleep pillow",revenue:3197},
+  {date:"2026-02-06",store:"ATP, Balewadi",products:"Mens Cloud dual strap sandal, Travel neck pillow, Butterfly pillow",revenue:5497},
+  {date:"2026-02-08",store:"Nexus Westend, Aundh",products:"Cloud Comfort Shoes x3, Cloud Backrest, Men's Cloud Comfort, Men's Puneri",revenue:13994},
+  {date:"2026-02-08",store:"PMC, Vimannagar",products:"Deep sleep pillow 5 inch, Cloud comfort shoes, Cloud comfort slippers",revenue:4847},
+  {date:"2026-02-08",store:"Elpro, PCMC",products:"Posture corrector M x2, Posture corrector S x2, Deep sleep pillow 4 inch, Cloud comfort men",revenue:10093},
+  {date:"2026-02-08",store:"Amanora, Magarpatta",products:"Travel Neck pillow, Maternity bundle, Mens dual strap sandal",revenue:5997},
+  {date:"2026-02-09",store:"PMC, Vimannagar",products:"Cloud backrest cushion, Maternity pillow",revenue:3898},
+  {date:"2026-02-09",store:"Nexus Westend, Aundh",products:"Men's Cloud Comfort shoes, Cervical Pillow, Deep Sleep Pillow x2",revenue:6996},
+  {date:"2026-02-09",store:"Elpro, PCMC",products:"Posture corrector M x2, Gym gloves",revenue:3397},
+  {date:"2026-02-09",store:"Amanora, Magarpatta",products:"Travel neck pillow x2, Lumber sacral belt, Cloud comfort sandal Black",revenue:5746},
+  {date:"2026-02-10",store:"Elpro, PCMC",products:"Ethnic sandal",revenue:1999},
+  {date:"2026-02-10",store:"Amanora, Magarpatta",products:"Travel neck pillow, Ultra Deep sleep pillow, Mens Cloud comfort sandal",revenue:4797},
+  {date:"2026-02-10",store:"PMC, Vimannagar",products:"Memory foam insole, Cloud comfort shoes, Posture corrector",revenue:4047},
+  {date:"2026-02-10",store:"Nexus Westend, Aundh",products:"Women's Cloud Comfort Sandals toeless uk6 peach, Men's Puneri Bk/8, Knee Cap XL",revenue:5147},
+  {date:"2026-02-11",store:"PMC, Vimannagar",products:"Car combo, Wedge cushion, Gel max insoles",revenue:4797},
+  {date:"2026-02-11",store:"Amanora, Magarpatta",products:"Lap desk pillow",revenue:3299},
+  {date:"2026-02-11",store:"Nexus Westend, Aundh",products:"Cloud comfort sandal, Cloud comfort shoes, Barefoot socks",revenue:6499},
+  {date:"2026-02-12",store:"Nexus Westend, Aundh",products:"Cloud comfort shoes, Deep sleep pillow, Car neck rest",revenue:5198},
+  {date:"2026-02-12",store:"Amanora, Magarpatta",products:"Lumbo sacral belt XXL, Travel neck pillow",revenue:2898},
+  {date:"2026-02-12",store:"PMC, Vimannagar",products:"Deep sleep pillow, Arch slippers, Cloud seating combo, Cloud comfort shoes, Car combo",revenue:10745},
+  {date:"2026-02-13",store:"Elpro, PCMC",products:"Mens cloud comfort 9 tan",revenue:2499},
+  {date:"2026-02-13",store:"Nexus Westend, Aundh",products:"Car Comfort Bundle, Cervical Neck Pillow",revenue:4498},
+  {date:"2026-02-13",store:"PMC, Vimannagar",products:"Gel max insoles, Posture corrector, Travel neck pillow",revenue:2897},
+  {date:"2026-02-13",store:"Amanora, Magarpatta",products:"Travel neck pillow",revenue:1299},
+  {date:"2026-02-15",store:"Amanora, Magarpatta",products:"Travel neck pillow, Cloud comfort sandal men, Dual strap sandal, Women Cloud comfort sandal",revenue:7246},
+  {date:"2026-02-15",store:"PMC, Vimannagar",products:"Travel neck pillow, Knee cap",revenue:2098},
+  {date:"2026-02-15",store:"Nexus Westend, Aundh",products:"Women cloud, Arch support sandal, Cuddle pillow, Women cloud sandal, Women cloud shoes",revenue:9196},
+  {date:"2026-02-15",store:"Elpro, PCMC",products:"Cloud comfort men 7/8/9, Cloud comfort woman toeless 39/40/41",revenue:11244},
+  {date:"2026-02-16",store:"Kopa Mall",products:"Mens Sandal UK 8/10 blk, Nasal Strips, Sleep desk pillow",revenue:6296},
+  {date:"2026-02-16",store:"Amanora, Magarpatta",products:"Cuddle pillow",revenue:2999},
+  {date:"2026-02-16",store:"Elpro, PCMC",products:"Cloud comfort men 7/8 uk, Car neck rest black x4, Arch sleeper 8/9 & maternity pillow",revenue:12791},
+  {date:"2026-02-16",store:"Nexus Westend, Aundh",products:"Men's Puneri Black UK 9",revenue:2499},
+  {date:"2026-02-16",store:"PMC, Vimannagar",products:"Gel max insoles, Deep sleep pillow",revenue:2198},
+  {date:"2026-02-17",store:"PMC, Vimannagar",products:"Deep sleep pillow, Wedge cushion, Posture corrector",revenue:4097},
+  {date:"2026-02-17",store:"Elpro, PCMC",products:"HRX Barefoot S size",revenue:2200},
+  {date:"2026-02-17",store:"Amanora, Magarpatta",products:"Arch sport Insole, Deep sleep pillow 5",revenue:3899},
+  {date:"2026-02-17",store:"Kopa Mall",products:"Mens comfort dual strap sandals uk7, Cloud comfort arch support uk8 black",revenue:3148},
+  {date:"2026-02-18",store:"Elpro, PCMC",products:"Men's Dual strap sandal, Car neckrest pillow black x3",revenue:5200},
+  {date:"2026-02-18",store:"Nexus Westend, Aundh",products:"Deep Sleep Pillow 4inch x2, Men's Cloud Comfort Black/6, Men's Puneri black/5",revenue:7496},
+  {date:"2026-02-18",store:"PMC, Vimannagar",products:"Car combo, Butterfly pillow",revenue:4998},
+  {date:"2026-02-19",store:"Nexus Westend, Aundh",products:"Women's Cloud Comfort Shoes x2, Men's Cloud Sandals, Car Comfort Bundle",revenue:9996},
+  {date:"2026-02-19",store:"Amanora, Magarpatta",products:"Arch support slipper, Travel neck pillow",revenue:2248},
+  {date:"2026-02-20",store:"Amanora, Magarpatta",products:"Arch support slipper 5UK",revenue:949},
+  {date:"2026-02-20",store:"Nexus Westend, Aundh",products:"Posture Corrector x2 S/M, Women's Cloud Comfort Shoes Pink, Bunyan Corrector, Women's Arch Support Sandals",revenue:8095},
+  {date:"2026-02-20",store:"PMC, Vimannagar",products:"Cloud comfort shoes, Posture corrector",revenue:3398},
+  {date:"2026-02-20",store:"Elpro, PCMC",products:"Travel neck pillow x5",revenue:5995},
+  {date:"2026-02-20",store:"Kopa Mall",products:"Cloud comfort sandal uk 4",revenue:1749},
+  {date:"2026-02-21",store:"Amanora, Magarpatta",products:"Butterfly pillow",revenue:1999},
+  {date:"2026-02-21",store:"Nexus Westend, Aundh",products:"Cervical neck pillow, Lap desk pillow, Arch Support Insoles, Men's Puneri Tan/8",revenue:9295},
+  {date:"2026-02-21",store:"PMC, Vimannagar",products:"Cloud comfort sandal",revenue:1749},
+  {date:"2026-02-22",store:"PMC, Vimannagar",products:"Bunion corrector, Arch insoles semi rigid",revenue:3598},
+  {date:"2026-02-22",store:"Amanora, Magarpatta",products:"Knee wrap XL, Cloud arch slipper uk5, Travel neck pillow Grey, Car neck pillow Tan",revenue:4146},
+  {date:"2026-02-23",store:"Amanora, Magarpatta",products:"Arch sport Insole, Travel neck pillow Grey",revenue:1998},
+  {date:"2026-02-23",store:"Elpro, PCMC",products:"Puneri black 11, Car bundle black, Women's cloud Tan 40, Car neckrest black, Travel neck grey & wine",revenue:10746},
+  {date:"2026-02-23",store:"Kopa Mall",products:"Cloud comfort shoe black",revenue:2499},
+  {date:"2026-02-24",store:"Nexus Westend, Aundh",products:"Car comfort bundle, Cervical pillow",revenue:4498},
+  {date:"2026-02-25",store:"Amanora, Magarpatta",products:"Arch support slipper uk 09, Lap desk pillow",revenue:4248},
+  {date:"2026-02-26",store:"Nexus Westend, Aundh",products:"Car comfort bundle",revenue:2999},
+  {date:"2026-02-26",store:"ATP, Balewadi",products:"Car comfort Bundle",revenue:2999},
+  {date:"2026-02-26",store:"Elpro, PCMC",products:"HRX barefoot S size, Car bundle black",revenue:5199},
+  {date:"2026-02-27",store:"Elpro, PCMC",products:"Cloud comfort men 7/8/9, Posture corrector L x4, Puneri 10 tan",revenue:9395},
+  {date:"2026-03-06",store:"Amanora, Magarpatta",products:"Deep Sleep pillow",revenue:1199},
+  {date:"2026-03-08",store:"Nexus Westend, Aundh",products:"Puneri chappal",revenue:2499},
+  {date:"2026-03-08",store:"Elpro, PCMC",products:"Women's cloud sandal Tan various sizes, Car bundle black, Cervical plus, Posture corrector L",revenue:12397},
+  {date:"2026-03-08",store:"Amanora, Magarpatta",products:"Car Bundle, Counter Cervical Plus pillow, Travel neck pillow, Deep sleep pillow",revenue:9396},
+  {date:"2026-03-09",store:"Kopa Mall",products:"Cloud comfort sandal Black, Frido cloud seat cushion",revenue:3898},
+  {date:"2026-03-09",store:"Nexus Westend, Aundh",products:"Car comfort bundle, Women arch support sandal",revenue:4898},
+  {date:"2026-03-10",store:"Amanora, Magarpatta",products:"Women's cloud comfort sandal, Deep sleep pillow",revenue:3348},
+  {date:"2026-03-10",store:"PMC, Vimannagar",products:"Semi rigid insoles, Cloud comfort sandal",revenue:3548},
+  {date:"2026-03-11",store:"Nexus Westend, Aundh",products:"Barefoot socks, Women's cloud sandal",revenue:4699},
+  {date:"2026-03-12",store:"Amanora, Magarpatta",products:"Women's cloud comfort sandal",revenue:1749},
+  {date:"2026-03-15",store:"Kopa Mall",products:"Cloud comfort sandals women's, Puneri chappal sizes 6/7, Gel max insole",revenue:7446},
+  {date:"2026-03-15",store:"Amanora, Magarpatta",products:"Cloud comfort sandal, Men's dual strap sandal, Cloud comfort women's",revenue:5947},
+  {date:"2026-03-16",store:"Amanora, Magarpatta",products:"Mens Cloud comfort sandal, Women's Cloud thong sandal",revenue:3748},
+  {date:"2026-03-17",store:"Nexus Westend, Aundh",products:"Car comfort bundle, Men's walking shoes, Cloud comfort sandal",revenue:9297},
+  {date:"2026-03-17",store:"Elpro, PCMC",products:"Puneri black Uk10, Maternity bundle, Wedge plus Max, Women's arch sandal",revenue:9496},
+  {date:"2026-03-17",store:"Amanora, Magarpatta",products:"Gel max insoles, Puneri chappal women's 7",revenue:3198},
+  {date:"2026-03-17",store:"PMC, Vimannagar",products:"Mattress Topper 72x36 unavailable, Women's Cloud Comfort Sandals Taupe, Mens Dual Strap Sandals, Car seat Cushion Black",revenue:15993},
+  {date:"2026-03-18",store:"Kopa Mall",products:"Cloud comfort sandals women's 7/8, Arch fit slippers peach, Puneri chappal 6/7",revenue:9445},
+  {date:"2026-03-18",store:"Elpro, PCMC",products:"Posture corrector S L x2, Women's cloud comfort sandal 36/37/38",revenue:7045},
+  {date:"2026-03-18",store:"Amanora, Magarpatta",products:"Lumbar Backrest Cushion Black",revenue:1799},
+  {date:"2026-03-19",store:"Nexus Westend, Aundh",products:"Car comfort bundle, Men's running shoes, Men's cloud sandal",revenue:8997},
+  {date:"2026-03-19",store:"Amanora, Magarpatta",products:"LS Belt, Arch slipper, Cloud mens sandal",revenue:4547},
+  {date:"2026-03-23",store:"Amanora, Magarpatta",products:"Cloud comfort sandal men's, Dual Gel insoles",revenue:2598},
+  {date:"2026-03-23",store:"Nexus Westend, Aundh",products:"Active Walking Shoes Men's, Arch support sandal",revenue:6199},
+  {date:"2026-03-24",store:"Amanora, Magarpatta",products:"Cloud comfort sandal women's, Cloud comfort sandal men's, Knee cap",revenue:4997},
+  {date:"2026-03-24",store:"PMC, Vimannagar",products:"Women's lace-up shoes lavender, Men's cloud sandal black uk9",revenue:4198},
+  {date:"2026-03-24",store:"Kopa Mall",products:"Women's cloud comfort toeless size 40, Men's puneri chappal UK 10, Posture corrector M",revenue:5397},
+  {date:"2026-03-24",store:"Amanora, Magarpatta",products:"Cloud sandal men UK 9, Arch support slipper uk5",revenue:2948},
+  {date:"2026-03-25",store:"Amanora, Magarpatta",products:"Gel Max insole, Butterfly pillow, Knee wrap, Arch sport Insole",revenue:3996},
+  {date:"2026-03-25",store:"Kopa Mall",products:"Maternity Pillow bundle",revenue:2899},
+  {date:"2026-03-25",store:"Elpro, PCMC",products:"HRX Barefoot XS size, Car bundle black",revenue:5199},
+  {date:"2026-03-26",store:"Kopa Mall",products:"Cloud comfort sandal Men/Women various sizes, Dual strap sandal, Puneri chappal, Posture corrector, Cloud comfort shoe",revenue:43930},
+  {date:"2026-03-26",store:"Nexus Westend, Aundh",products:"Active Walking Shoes Men's",revenue:3999},
+  {date:"2026-03-26",store:"Elpro, PCMC",products:"Dual strap sandal 8/9/10",revenue:7497},
+  {date:"2026-03-26",store:"Amanora, Magarpatta",products:"Cloud comfort sandal, Arch Support Slippers",revenue:3148},
+  {date:"2026-03-27",store:"Amanora, Magarpatta",products:"Arch slipper, Cloud comfort sandal, Butterfly pillow, Cervical Plus pillow, Gel Max insole",revenue:6895},
+  {date:"2026-03-27",store:"Elpro, PCMC",products:"Cloud comfort woman thong 36/38/39, Posture corrector S, Dual strap sandal 7/8/9 green",revenue:19890},
+  {date:"2026-03-27",store:"Kopa Mall",products:"Cloud comfort sandals women uk8, Cloud comfort sandals men uk 11",revenue:4098},
+  // April data
+  {date:"2026-01-04",store:"Kopa Mall",products:"Women cloud comfort sandal, Puneri chappal, Frido Ultimate Pro Seat Cushion, Cloud Backrest",revenue:7990},
+  {date:"2026-01-04",store:"Elpro, PCMC",products:"Men's cloud Black UK 8/9/10, Women's cloud Tan UK 5/6, Formal shoes, Walking shoes UK 10, Car bundle black",revenue:22592},
+  {date:"2026-01-04",store:"Amanora, Magarpatta",products:"Gel Max insole, Cloud comfort sandal, Dual strap sandal",revenue:5197},
+  {date:"2026-02-04",store:"Kopa Mall",products:"Women cloud comfort sandal 38",revenue:1899},
+  {date:"2026-02-04",store:"Elpro, PCMC",products:"Men's cloud sandal UK 8/9, Women's arch sandal 37, Formal shoes, Gel max insole, Dual gel pro, Ethnic sandal 38, Dual strap UK 8/9/10",revenue:22293},
+  {date:"2026-02-04",store:"Amanora, Magarpatta",products:"Cloud cushion Combo, Gel Max insole, Maternity pillow bundle, Arch sport Insole",revenue:7496},
+  {date:"2026-03-04",store:"Kopa Mall",products:"Cloud comfort womens sandals, Puneri chappal, Arch fit chappal, Mens cloud comfort Dual strap",revenue:7546},
+  {date:"2026-03-04",store:"Elpro, PCMC",products:"Cloud comfort thong 36-40, Arch support sandal 36-41",revenue:1999},
+  {date:"2026-03-04",store:"Amanora, Magarpatta",products:"Deep sleep pillow 5, Butterfly pillow",revenue:3698},
+  {date:"2026-04-04",store:"Amanora, Magarpatta",products:"Cloud comfort bundle, Deep sleep pillow 5 inch, Knee cap",revenue:5697},
+  {date:"2026-04-04",store:"Elpro, PCMC",products:"Dual strap men's 8/9/10, Men's cloud 9/10 black, Women's cloud 4/5/6 tan, Butterfly pillow x3",revenue:26000},
+  {date:"2026-04-04",store:"Kopa Mall",products:"Men's Puneri uk 10, Posture corrector M x2, Women's Cloud sandal, Travel neck pillow, Gel max insole",revenue:9394},
+  {date:"2026-04-05",store:"Elpro, PCMC",products:"Cloud comfort men black 7/8/9/10",revenue:749},
+  {date:"2026-04-05",store:"Amanora, Magarpatta",products:"Gel Max insole, Maternity Pillow Bundle, Counter Cervical Plus pillow, LS Belt, Arch slipper, PC Belt",revenue:6296},
+  {date:"2026-04-06",store:"Kopa Mall",products:"Frido Women's Cloud Comfort Sandal various, Cloud Comfort Arch Support Slippers, Men's Cloud Comfort Sandal, Frido Ultimate Pro Seat Cushion, Cloud Backrest",revenue:10538},
+  {date:"2026-04-06",store:"Nexus Westend, Aundh",products:"Men's walking shoes, Car comfort bundle, Cloud comfort sandal, Women walking shoes",revenue:13096},
+  {date:"2026-04-06",store:"Amanora, Magarpatta",products:"Gel Max insole",revenue:699},
+  {date:"2026-04-07",store:"Kopa Mall",products:"Women's Cloud comfort sandal 38, Puneri chappal men's uk10, Posture corrector L, Cuddle pillow barbie pink",revenue:8396},
+  {date:"2026-04-07",store:"Nexus Westend, Aundh",products:"Car comfort bundle, Formal Shoes, Men's walking shoes, Women's walking shoes",revenue:7198},
+  {date:"2026-04-07",store:"Elpro, PCMC",products:"Women's cloud shoes lace-up uk5, Cloud sandal uk4, LS belt XL, Men's cloud sandal UK 8, Butterfly pillow, Formal shoes",revenue:14894},
+  {date:"2026-04-07",store:"Amanora, Magarpatta",products:"Gel Max insole, Cloud comfort sandal, Dual strap sandal Black",revenue:5397},
+];
+
+// ========================= STATE =========================
+let filtered = [...RAW];
+let activeStore = 'all';
+let activeMonth = 'all';
+let sortKey = 'date';
+let sortDir = 1;
+let currentPage = 1;
+const PER_PAGE = 15;
+let charts = {};
+
+// ========================= UTILS =========================
+function fmt(n) {
+  if (n >= 100000) return '₹' + (n/100000).toFixed(1) + 'L';
+  if (n >= 1000) return '₹' + (n/1000).toFixed(1) + 'K';
+  return '₹' + n;
+}
+
+function fmtFull(n) {
+  return '₹' + n.toLocaleString('en-IN');
+}
+
+function getMonth(d) {
+  const dt = new Date(d);
+  return dt.getMonth(); // 0=Jan
+}
+
+const STORE_COLORS = {
+  "PMC, Vimannagar": "#ff4d6d",
+  "Nexus Westend, Aundh": "#ff8800",
+  "Amanora, Magarpatta": "#00d4aa",
+  "Elpro, PCMC": "#7b61ff",
+  "ATP, Balewadi": "#fbbf24",
+  "Kopa Mall": "#38bdf8",
+};
+
+const STORE_SHORTS = {
+  "PMC, Vimannagar": "PMC",
+  "Nexus Westend, Aundh": "Nexus",
+  "Amanora, Magarpatta": "Amanora",
+  "Elpro, PCMC": "Elpro",
+  "ATP, Balewadi": "ATP",
+  "Kopa Mall": "Kopa",
+};
+
+// ========================= FILTER =========================
+function applyFilters() {
+  filtered = RAW.filter(r => {
+    const storeOk = activeStore === 'all' || r.store === activeStore;
+    const dt = new Date(r.date);
+    const m = dt.getMonth();
+    const monthOk = activeMonth === 'all' ||
+      (activeMonth === 'jan' && m === 0) ||
+      (activeMonth === 'feb' && m === 1) ||
+      (activeMonth === 'mar' && m === 2) ||
+      (activeMonth === 'apr' && m === 3);
+    return storeOk && monthOk;
+  });
+  currentPage = 1;
+  updateAll();
+}
+
+function filterStore(store, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b => {
+    if (b.textContent.length < 20) b.classList.remove('active');
+  });
+  btn.classList.add('active');
+  activeStore = store;
+  applyFilters();
+}
+
+function filterMonth(m, btn) {
+  ['pAll','pJan','pFeb','pMar','pApr'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  btn.classList.add('active');
+  activeMonth = m;
+  applyFilters();
+}
+
+// ========================= KPIs =========================
+function updateKPIs() {
+  const total = filtered.reduce((a,r)=>a+r.revenue,0);
+  const incidents = filtered.length;
+  const avg = incidents > 0 ? Math.round(total/incidents) : 0;
+
+  // worst store
+  const storeMap = {};
+  filtered.forEach(r => { storeMap[r.store] = (storeMap[r.store]||0) + r.revenue; });
+  const worstStore = Object.entries(storeMap).sort((a,b)=>b[1]-a[1])[0];
+
+  // peak day
+  const dayMap = {};
+  filtered.forEach(r => { dayMap[r.date] = (dayMap[r.date]||0) + r.revenue; });
+  const peakDay = Object.entries(dayMap).sort((a,b)=>b[1]-a[1])[0];
+
+  document.getElementById('kpiTotal').textContent = fmt(total);
+  document.getElementById('kpiTotalSub').textContent = fmtFull(total) + ' total';
+  document.getElementById('kpiIncidents').textContent = incidents;
+  document.getElementById('kpiIncidentsSub').textContent = 'Stockout events recorded';
+  document.getElementById('kpiAvg').textContent = fmt(avg);
+  document.getElementById('kpiAvgSub').textContent = 'Average per event';
+
+  if (worstStore) {
+    document.getElementById('kpiWorst').textContent = STORE_SHORTS[worstStore[0]] || worstStore[0];
+    document.getElementById('kpiWorstSub').textContent = fmtFull(worstStore[1]) + ' lost';
+  }
+
+  if (peakDay) {
+    const d = new Date(peakDay[0]);
+    document.getElementById('kpiPeak').textContent = d.toLocaleDateString('en-IN', {day:'2-digit',month:'short'});
+    document.getElementById('kpiPeakSub').textContent = fmtFull(peakDay[1]) + ' lost';
+  }
+
+  // Alert
+  const topProd = getTopProducts(1)[0];
+  document.getElementById('alertText').innerHTML =
+    `<strong>Insight:</strong> Total lost revenue = <strong>${fmtFull(total)}</strong> across ${incidents} incidents. ` +
+    (topProd ? `Most out-of-stock product: <strong>${topProd.name}</strong> (${topProd.count} times).` : '') +
+    (worstStore ? ` Worst hit store: <strong>${worstStore[0]}</strong> with ${fmtFull(worstStore[1])} lost.` : '');
+}
+
+// ========================= TREND CHART =========================
+function updateTrendChart() {
+  const dayMap = {};
+  filtered.forEach(r => { dayMap[r.date] = (dayMap[r.date]||0) + r.revenue; });
+  const days = Object.keys(dayMap).sort();
+  const vals = days.map(d => dayMap[d]);
+
+  // 7-day rolling avg
+  const rolling = vals.map((v,i) => {
+    const slice = vals.slice(Math.max(0,i-6), i+1);
+    return Math.round(slice.reduce((a,b)=>a+b,0)/slice.length);
+  });
+
+  const labels = days.map(d => {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('en-IN', {day:'2-digit', month:'short'});
+  });
+
+  if (charts.trend) charts.trend.destroy();
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  charts.trend = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Daily Loss',
+          data: vals,
+          backgroundColor: 'rgba(255,77,109,0.3)',
+          borderColor: 'rgba(255,77,109,0.6)',
+          borderWidth: 1,
+          borderRadius: 3,
+        },
+        {
+          label: '7-Day Avg',
+          data: rolling,
+          type: 'line',
+          borderColor: '#ff8800',
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.4,
+          fill: false,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: '#6b7280', font: { family: 'DM Mono', size: 10 }, boxWidth: 12 }
+        },
+        tooltip: {
+          backgroundColor: '#111318',
+          borderColor: '#1f2330',
+          borderWidth: 1,
+          titleColor: '#e8eaf0',
+          bodyColor: '#6b7280',
+          callbacks: {
+            label: ctx => ' ' + fmtFull(ctx.raw)
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 9 }, maxTicksLimit: 12 },
+          grid: { color: 'rgba(31,35,48,0.5)' }
+        },
+        y: {
+          ticks: {
+            color: '#6b7280', font: { family: 'DM Mono', size: 9 },
+            callback: v => fmt(v)
+          },
+          grid: { color: 'rgba(31,35,48,0.5)' }
+        }
+      }
+    }
+  });
+}
+
+// ========================= DONUT CHART =========================
+function updateDonutChart() {
+  const storeMap = {};
+  filtered.forEach(r => { storeMap[r.store] = (storeMap[r.store]||0) + r.revenue; });
+  const sorted = Object.entries(storeMap).sort((a,b)=>b[1]-a[1]);
+  const labels = sorted.map(([s]) => STORE_SHORTS[s] || s);
+  const vals = sorted.map(([,v]) => v);
+  const colors = sorted.map(([s]) => STORE_COLORS[s] || '#888');
+
+  if (charts.donut) charts.donut.destroy();
+  const ctx = document.getElementById('donutChart').getContext('2d');
+  charts.donut = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        backgroundColor: colors.map(c => c + '99'),
+        borderColor: colors,
+        borderWidth: 2,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '65%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { color: '#6b7280', font: { family: 'DM Mono', size: 10 }, padding: 12, boxWidth: 10 }
+        },
+        tooltip: {
+          backgroundColor: '#111318',
+          borderColor: '#1f2330',
+          borderWidth: 1,
+          titleColor: '#e8eaf0',
+          bodyColor: '#6b7280',
+          callbacks: { label: ctx => ' ' + fmtFull(ctx.raw) }
+        }
+      }
+    }
+  });
+}
+
+// ========================= BAR CHART =========================
+function updateBarChart() {
+  const stores = [...new Set(RAW.map(r=>r.store))];
+  const months = ['Jan','Feb','Mar','Apr'];
+  const monthNums = [0,1,2,3];
+
+  const datasets = stores.map(store => {
+    const data = monthNums.map(m => {
+      return filtered.filter(r => r.store === store && new Date(r.date).getMonth() === m)
+        .reduce((a,r)=>a+r.revenue, 0);
+    });
+    const color = STORE_COLORS[store] || '#888';
+    return {
+      label: STORE_SHORTS[store] || store,
+      data,
+      backgroundColor: color + '88',
+      borderColor: color,
+      borderWidth: 1,
+      borderRadius: 3,
+    };
+  });
+
+  if (charts.bar) charts.bar.destroy();
+  const ctx = document.getElementById('barChart').getContext('2d');
+  charts.bar = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: months, datasets },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: {
+          labels: { color: '#6b7280', font: { family: 'DM Mono', size: 9 }, boxWidth: 10, padding: 8 }
+        },
+        tooltip: {
+          backgroundColor: '#111318',
+          borderColor: '#1f2330',
+          borderWidth: 1,
+          titleColor: '#e8eaf0',
+          bodyColor: '#6b7280',
+          callbacks: { label: ctx => ' ' + fmtFull(ctx.raw) }
+        }
+      },
+      scales: {
+        x: {
+          stacked: false,
+          ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 10 } },
+          grid: { color: 'rgba(31,35,48,0.5)' }
+        },
+        y: {
+          ticks: { color: '#6b7280', font: { family: 'DM Mono', size: 9 }, callback: v => fmt(v) },
+          grid: { color: 'rgba(31,35,48,0.5)' }
+        }
+      }
+    }
+  });
+}
+
+// ========================= PRODUCT BARS =========================
+function getTopProducts(n) {
+  const prodMap = {};
+  filtered.forEach(r => {
+    const prods = r.products.split(/[,\n]/).map(p=>p.trim().toLowerCase().replace(/^\d+\.\s*/,''));
+    prods.forEach(p => {
+      if (p.length < 3) return;
+      // normalize
+      let key = p;
+      if (key.includes('deep sleep')) key = 'Deep Sleep Pillow';
+      else if (key.includes('travel neck')) key = 'Travel Neck Pillow';
+      else if (key.includes('posture corrector')) key = 'Posture Corrector';
+      else if (key.includes('car') && key.includes('bundle')) key = 'Car Comfort Bundle';
+      else if (key.includes('cloud comfort') && key.includes('sandal') && key.includes('men')) key = "Men's Cloud Comfort Sandal";
+      else if (key.includes('cloud comfort') && key.includes('sandal') && key.includes('wom')) key = "Women's Cloud Comfort Sandal";
+      else if (key.includes('arch') && key.includes('insole')) key = 'Arch Support Insoles';
+      else if (key.includes('arch') && key.includes('slipper')) key = 'Arch Support Slipper';
+      else if (key.includes('puneri') || key.includes('punneri')) key = 'Puneri Chappal';
+      else if (key.includes('maternity')) key = 'Maternity Bundle/Pillow';
+      else if (key.includes('butterfly')) key = 'Butterfly Pillow';
+      else if (key.includes('dual strap')) key = 'Dual Strap Sandal';
+      else if (key.includes('gel max')) key = 'Gel Max Insoles';
+      else if (key.includes('car neck') || key.includes('car neckrest')) key = 'Car Neck Rest Pillow';
+      else if (key.includes('cervical')) key = 'Cervical Pillow';
+      else if (key.includes('knee cap') || key.includes('knee wrap')) key = 'Knee Cap/Wrap';
+      else return;
+      prodMap[key] = (prodMap[key]||0) + 1;
+    });
+  });
+  return Object.entries(prodMap).sort((a,b)=>b[1]-a[1]).slice(0,n).map(([name,count])=>({name,count}));
+}
+
+function updateProductBars() {
+  const top = getTopProducts(10);
+  const max = top[0]?.count || 1;
+  const el = document.getElementById('productBars');
+  el.innerHTML = top.map(({name,count}) => `
+    <div class="product-bar-row">
+      <div class="product-name">${name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(count/max*100)}%"></div></div>
+      <div class="bar-val">${count}×</div>
+    </div>
+  `).join('');
+}
+
+// ========================= STORE RANKS =========================
+function updateStoreRanks() {
+  const storeMap = {};
+  const storeIncidents = {};
+  filtered.forEach(r => {
+    storeMap[r.store] = (storeMap[r.store]||0) + r.revenue;
+    storeIncidents[r.store] = (storeIncidents[r.store]||0) + 1;
+  });
+  const sorted = Object.entries(storeMap).sort((a,b)=>b[1]-a[1]);
+  const el = document.getElementById('storeRanks');
+  el.innerHTML = sorted.map(([store, amount], i) => {
+    const color = STORE_COLORS[store] || '#888';
+    return `
+      <div class="store-row">
+        <div class="store-rank" style="background:${color}22;color:${color}">${i+1}</div>
+        <div class="store-name-col">
+          <div class="store-name-text">${STORE_SHORTS[store] || store}</div>
+          <div class="store-incidents">${storeIncidents[store]} incidents</div>
+        </div>
+        <div class="store-amount">${fmt(amount)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+// ========================= TABLE =========================
+function sortTable(key) {
+  if (sortKey === key) sortDir *= -1;
+  else { sortKey = key; sortDir = 1; }
+  renderTable();
+}
+
+function renderTable() {
+  const q = document.getElementById('tableSearch').value.toLowerCase();
+  let rows = filtered.filter(r =>
+    !q || r.products.toLowerCase().includes(q) || r.store.toLowerCase().includes(q)
+  );
+
+  rows.sort((a,b) => {
+    if (sortKey === 'date') return sortDir * (a.date > b.date ? 1 : -1);
+    if (sortKey === 'store') return sortDir * a.store.localeCompare(b.store);
+    if (sortKey === 'revenue') return sortDir * (b.revenue - a.revenue);
+    return 0;
+  });
+
+  document.getElementById('rowCount').textContent = `(${rows.length} records)`;
+
+  const totalPages = Math.ceil(rows.length / PER_PAGE);
+  const page = rows.slice((currentPage-1)*PER_PAGE, currentPage*PER_PAGE);
+  const color = r => STORE_COLORS[r.store] || '#888';
+
+  document.getElementById('tableBody').innerHTML = page.map((r, i) => {
+    const dt = new Date(r.date);
+    const dateStr = dt.toLocaleDateString('en-IN', {day:'2-digit',month:'short',year:'2-digit'});
+    return `
+      <tr>
+        <td style="color:var(--muted);font-size:11px;">${dateStr}</td>
+        <td><span style="color:${color(r)};font-size:11px;">${r.store}</span></td>
+        <td class="products">${r.products}</td>
+        <td class="revenue">${r.revenue > 0 ? fmtFull(r.revenue) : '—'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  // Pagination
+  const pg = document.getElementById('pagination');
+  let html = '';
+  if (currentPage > 1) html += `<button class="page-btn" onclick="goPage(${currentPage-1})">← Prev</button>`;
+  for (let p = Math.max(1,currentPage-2); p <= Math.min(totalPages,currentPage+2); p++) {
+    html += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+  }
+  if (currentPage < totalPages) html += `<button class="page-btn" onclick="goPage(${currentPage+1})">Next →</button>`;
+  pg.innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; renderTable(); }
+
+// ========================= FOOTER =========================
+function updateFooter() {
+  const total = filtered.reduce((a,r)=>a+r.revenue,0);
+  const incidents = filtered.length;
+  document.getElementById('footerStats').textContent =
+    `${incidents} records · ${fmtFull(total)} total lost · Data: Jan 16 – Apr 7, 2026`;
+}
+
+// ========================= MASTER UPDATE =========================
+function updateAll() {
+  updateKPIs();
+  updateTrendChart();
+  updateDonutChart();
+  updateBarChart();
+  updateProductBars();
+  updateStoreRanks();
+  renderTable();
+  updateFooter();
+
+  const now = new Date();
+  document.getElementById('last-updated').textContent =
+    'Last updated: ' + now.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'});
+}
+
+// Init
+updateAll();
+</script>
+</body>
+</html>
